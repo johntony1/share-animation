@@ -28,6 +28,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { gsap } from "gsap";
 
@@ -38,6 +39,7 @@ import IMG_GLOBE_SUBTRACT from "./assets/globe-subtract.svg";
 import IMG_CLOSE          from "./assets/close.svg";
 import IMG_ARROW_DOWN     from "./assets/arrow-down.svg";
 import IMG_CHIP_CLOSE     from "./assets/chip-close.svg";
+import IMG_CHECK          from "./assets/check.svg";
 export { IMG_GLOBE_KEYLINES, IMG_GLOBE_SUBTRACT }; // suppress unused-export lint
 
 // ─── Avatar illustrations (node 202418-305811) ───────────────────────────────
@@ -198,10 +200,108 @@ function displayName(email: string) {
   return email.includes("@") ? email.split("@")[0] : email;
 }
 
-// ─── MEMBER ROW (appears in "Members with access" after invite) ───────────────
-interface Member { email: string; }
+// ─── PERMISSION DROPDOWN ─────────────────────────────────────────────────────
+type Permission = "view" | "edit";
 
-function MemberRow({ member, delay }: { member: Member; delay: number }) {
+const DROP_SPRING = { type: "spring" as const, visualDuration: 0.22, bounce: 0.2 };
+
+function PermissionDropdown({ value, onChange }: { value: Permission; onChange: (v: Permission) => void }) {
+  const [open, setOpen]   = useState(false);
+  const triggerRef        = useRef<HTMLButtonElement>(null);
+  const dropdownRef       = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, right: 0 });
+
+  function openMenu() {
+    if (triggerRef.current) {
+      const r = triggerRef.current.getBoundingClientRect();
+      setCoords({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    }
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (!triggerRef.current?.contains(t) && !dropdownRef.current?.contains(t)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const label = value === "view" ? "Can view" : "Can edit";
+
+  return (
+    <>
+      {/* Trigger */}
+      <button
+        ref={triggerRef}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className="flex gap-[4px] items-center shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3592f9] rounded-sm"
+      >
+        <p className="font-normal text-[13px] leading-[20px] text-[#71717a] whitespace-nowrap">
+          {label}
+        </p>
+        <div className="relative overflow-clip shrink-0 size-[20px]">
+          <div className="absolute" style={{ inset: "35.83% 26.13% 35% 26.14%" }}>
+            <img alt="" aria-hidden="true" className="absolute block inset-0 max-w-none size-full" src={IMG_ARROW_DOWN} />
+          </div>
+        </div>
+      </button>
+
+      {/* Portal dropdown — escapes overflow-hidden parents */}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={dropdownRef}
+              style={{ position: "fixed", top: coords.top, right: coords.right, zIndex: 9999, transformOrigin: "top right" }}
+              initial={{ opacity: 0, scale: 0.9, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: -8, transition: { duration: 0.12, ease: "easeIn" as const } }}
+              transition={DROP_SPRING}
+            >
+              <div
+                className="bg-white flex flex-col gap-[2px] p-[4px] rounded-[24px] w-[132px]"
+                style={{ boxShadow: "0px 2px 4px 0px rgba(0,0,0,0.04), 0px 1px 2px 0px rgba(0,0,0,0.06), 0px 0px 1px 0.5px #ebebeb" }}
+              >
+                {(["edit", "view"] as const).map((opt) => {
+                  const sel = value === opt;
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => { onChange(opt); setOpen(false); }}
+                      className="flex gap-[12px] items-center min-h-[36px] px-[12px] py-[6px] rounded-[20px] w-full text-left cursor-pointer"
+                      style={{ background: sel ? "rgba(235,235,236,0.8)" : "transparent" }}
+                    >
+                      <p className="flex-1 font-medium text-[14px] leading-[1.43] whitespace-nowrap"
+                         style={{ color: sel ? "#18181b" : "#5c5c5c" }}>
+                        Can {opt}
+                      </p>
+                      {sel && (
+                        <div className="overflow-clip relative shrink-0 size-[24px]">
+                          <div className="absolute" style={{ inset: "27.42% 17.72% 27.5% 18.64%" }}>
+                            <img alt="" aria-hidden="true" className="absolute block inset-0 max-w-none size-full" src={IMG_CHECK} />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ─── MEMBER ROW (appears in "Members with access" after invite) ───────────────
+interface Member { email: string; permission: Permission; }
+
+function MemberRow({ member, delay, onPermissionChange }: { member: Member; delay: number; onPermissionChange: (v: Permission) => void }) {
   const name = displayName(member.email);
   const av   = pickAvatar(member.email);
   return (
@@ -237,17 +337,8 @@ function MemberRow({ member, delay }: { member: Member; delay: number }) {
           </div>
         </div>
       </div>
-      {/* Right: Can view ↓ */}
-      <div className="flex gap-[4px] items-center shrink-0">
-        <p className="font-normal text-[12px] leading-[18px] text-[#71717a] whitespace-nowrap">
-          Can view
-        </p>
-        <div className="relative overflow-clip shrink-0 size-[20px]">
-          <div className="absolute" style={{ inset: "35.83% 26.13% 35% 26.14%" }}>
-            <img alt="" aria-hidden="true" className="absolute block inset-0 max-w-none size-full" src={IMG_ARROW_DOWN} />
-          </div>
-        </div>
-      </div>
+      {/* Right: permission dropdown */}
+      <PermissionDropdown value={member.permission} onChange={onPermissionChange} />
     </motion.div>
   );
 }
@@ -308,6 +399,7 @@ export function ShareModal({ onClose }: ShareModalProps) {
   const [copied, setCopied]   = useState(false);
   const [emails, setEmails]   = useState<string[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [inputPermission, setInputPermission] = useState<Permission>("view");
   const [members, setMembers] = useState<Member[]>([]);
   const copyBtnRef  = useRef<HTMLButtonElement>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -327,7 +419,7 @@ export function ShareModal({ onClose }: ShareModalProps) {
     if (toInvite.length === 0) return;
     setMembers((prev) => {
       const existing = new Set(prev.map((m) => m.email));
-      const newOnes  = toInvite.filter((e) => !existing.has(e)).map((e) => ({ email: e }));
+      const newOnes  = toInvite.filter((e) => !existing.has(e)).map((e) => ({ email: e, permission: inputPermission }));
       return [...prev, ...newOnes];
     });
     setEmails([]);
@@ -587,16 +679,9 @@ export function ShareModal({ onClose }: ShareModalProps) {
                               style={{ letterSpacing: "-0.006em" }}
                             />
                           </div>
-                          {/* Right: Can view dropdown — stays top-aligned when field grows */}
-                          <div className="flex gap-1 items-center shrink-0 h-[20px]">
-                            <p className="font-normal text-[13px] leading-[20px] text-[#71717a] whitespace-nowrap">
-                              Can view
-                            </p>
-                            <div className="relative overflow-clip shrink-0 size-[20px]">
-                              <div className="absolute" style={{ inset: "35.83% 26.13% 35% 26.14%" }}>
-                                <img alt="" aria-hidden="true" className="absolute block inset-0 max-w-none size-full" src={IMG_ARROW_DOWN} />
-                              </div>
-                            </div>
+                          {/* Right: permission dropdown — stays top-aligned when field grows */}
+                          <div className="shrink-0 h-[20px] flex items-center">
+                            <PermissionDropdown value={inputPermission} onChange={setInputPermission} />
                           </div>
                         </div>
                       </div>
@@ -668,7 +753,16 @@ export function ShareModal({ onClose }: ShareModalProps) {
                   {/* Member rows */}
                   <AnimatePresence mode="popLayout" initial={false}>
                     {members.map((m, i) => (
-                      <MemberRow key={m.email} member={m} delay={i * 0.045} />
+                      <MemberRow
+                        key={m.email}
+                        member={m}
+                        delay={i * 0.045}
+                        onPermissionChange={(v) =>
+                          setMembers((prev) =>
+                            prev.map((x) => x.email === m.email ? { ...x, permission: v } : x)
+                          )
+                        }
+                      />
                     ))}
                   </AnimatePresence>
                 </div>
