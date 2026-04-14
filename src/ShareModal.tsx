@@ -202,10 +202,54 @@ const MEMBER_SPRING = { type: "spring" as const, visualDuration: 0.28, bounce: 0
 /* STORYBOARD:
  *   drag left  past  -28px → snap open  to -56px (delete button fully revealed)
  *   drag right past -28px  → snap close to   0px
- *   click ×                → member exits left with fade
+ *   click ×                → 6 red particles evaporate upward, row exits
+ *
+ * EVAPORATE (on × click):
+ *    0ms   6 particles spawn at button center
+ *    0ms   particles drift up (y -16 to -40px) with slight x scatter
+ *   15ms   staggered per particle
+ *  450ms   all particles faded + removed
  */
-const SWIPE_DELETE_WIDTH = 56;
+const SWIPE_DELETE_WIDTH = 44;  // 44px = min touch target per Emil guidelines
 const SWIPE_SNAP = { type: "spring" as const, stiffness: 500, damping: 38 };
+const EVAPORATE = {
+  count: 6,
+  duration: 0.45,
+  colors: ["#fca5a5", "#f87171", "#ef4444", "#fecaca", "#fda4af", "#f87171"],
+};
+
+function fireEvaporate(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  for (let i = 0; i < EVAPORATE.count; i++) {
+    const dot = document.createElement("span");
+    const size = 3 + Math.random() * 3;
+    Object.assign(dot.style, {
+      position: "fixed",
+      width: `${size}px`, height: `${size}px`,
+      borderRadius: "50%",
+      background: EVAPORATE.colors[i % EVAPORATE.colors.length],
+      left: `${cx}px`, top: `${cy}px`,
+      pointerEvents: "none", zIndex: "9999",
+      transform: "translate(-50%, -50%)",
+    });
+    document.body.appendChild(dot);
+    gsap.fromTo(dot,
+      { x: 0, y: 0, opacity: 1, scale: 1 },
+      {
+        x: (Math.random() - 0.5) * 22,
+        y: -(16 + Math.random() * 24),
+        opacity: 0,
+        scale: 0.25,
+        duration: EVAPORATE.duration,
+        delay: i * 0.028,
+        ease: "power1.out",
+        onComplete: () => dot.remove(),
+      }
+    );
+  }
+}
 
 function displayName(email: string) {
   return email.includes("@") ? email.split("@")[0] : email;
@@ -323,12 +367,12 @@ function MemberRow({
   onPermissionChange: (v: Permission) => void;
   onDelete: () => void;
 }) {
-  const name = displayName(member.email);
-  const av   = pickAvatar(member.email);
-  const x    = useMotionValue(0);
+  const name       = displayName(member.email);
+  const av         = pickAvatar(member.email);
+  const x          = useMotionValue(0);
+  const deleteBtnRef = useRef<HTMLButtonElement>(null);
 
   function handleDragEnd() {
-    // Snap open if dragged past half-width, else snap shut
     if (x.get() < -(SWIPE_DELETE_WIDTH / 2)) {
       fmAnimate(x, -SWIPE_DELETE_WIDTH, SWIPE_SNAP);
     } else {
@@ -336,8 +380,13 @@ function MemberRow({
     }
   }
 
+  function handleDelete() {
+    if (deleteBtnRef.current) fireEvaporate(deleteBtnRef.current);
+    onDelete();
+  }
+
   return (
-    // Outer: layout + enter/exit — clips the delete button that lives behind the row
+    // Outer: layout + enter/exit — clips the delete button that lives behind
     <motion.div
       layout
       initial={{ opacity: 0, x: -10 }}
@@ -352,16 +401,17 @@ function MemberRow({
         style={{ width: SWIPE_DELETE_WIDTH }}
       >
         <button
-          onClick={onDelete}
+          ref={deleteBtnRef}
+          onClick={handleDelete}
           className="flex items-center justify-center w-full h-full cursor-pointer focus-visible:outline-none rounded-r-[10px]"
-          style={{ background: "#f97316" }}
+          style={{ background: "#ef4444" }}
           aria-label={`Remove ${member.email}`}
         >
           <img
             src={IMG_MINGCUTE_CLOSE}
             alt=""
             aria-hidden="true"
-            className="size-[18px] pointer-events-none"
+            className="size-[16px] pointer-events-none"
           />
         </button>
       </div>
