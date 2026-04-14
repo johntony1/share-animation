@@ -40,6 +40,42 @@ import IMG_ARROW_DOWN     from "./assets/arrow-down.svg";
 import IMG_CHIP_CLOSE     from "./assets/chip-close.svg";
 export { IMG_GLOBE_KEYLINES, IMG_GLOBE_SUBTRACT }; // suppress unused-export lint
 
+// ─── Avatar illustrations (node 202418-305811) ───────────────────────────────
+import AV0  from "./assets/avatar-0.png";
+import AV1  from "./assets/avatar-1.png";
+import AV2  from "./assets/avatar-2.png";
+import AV3  from "./assets/avatar-3.png";
+import AV4  from "./assets/avatar-4.png";
+import AV5  from "./assets/avatar-5.png";
+import AV6  from "./assets/avatar-6.png";
+import AV7  from "./assets/avatar-7.png";
+import AV8  from "./assets/avatar-8.png";
+import AV9  from "./assets/avatar-9.png";
+import AV10 from "./assets/avatar-10.png";
+import AV11 from "./assets/avatar-11.png";
+
+const AVATARS = [
+  { src: AV0,  bg: "#ebebeb"  },
+  { src: AV1,  bg: "#ffecc0"  },
+  { src: AV2,  bg: "#c0d5ff"  },
+  { src: AV3,  bg: "#c0eaff"  },
+  { src: AV4,  bg: "#cac0ff"  },
+  { src: AV5,  bg: "#ffc0c5"  },
+  { src: AV6,  bg: "#ebebeb"  },
+  { src: AV7,  bg: "#c0d5ff"  },
+  { src: AV8,  bg: "#ffecc0"  },
+  { src: AV9,  bg: "#c0eaff"  },
+  { src: AV10, bg: "#cac0ff"  },
+  { src: AV11, bg: "#ffc0c5"  },
+] as const;
+
+/** Pick a deterministic avatar from the pool based on the email string */
+function pickAvatar(email: string) {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = (hash * 31 + email.charCodeAt(i)) >>> 0;
+  return AVATARS[hash % AVATARS.length];
+}
+
 // ─── TIMING (ms after mount) ─────────────────────────────────────────────────
 const TIMING = {
   card:      80,
@@ -158,10 +194,6 @@ const SHADOW = {
 const CHIP_SPRING   = { type: "spring" as const, visualDuration: 0.2, bounce: 0.3 };
 const MEMBER_SPRING = { type: "spring" as const, visualDuration: 0.28, bounce: 0.18 };
 
-const AVATAR_COLORS = ["#ffecc0", "#c0d5ff", "#c0eaff", "#d0f0c0", "#ffd0d0", "#e8d5ff"];
-function avatarColor(email: string) {
-  return AVATAR_COLORS[email.charCodeAt(0) % AVATAR_COLORS.length];
-}
 function displayName(email: string) {
   return email.includes("@") ? email.split("@")[0] : email;
 }
@@ -171,7 +203,7 @@ interface Member { email: string; }
 
 function MemberRow({ member, delay }: { member: Member; delay: number }) {
   const name = displayName(member.email);
-  const bg   = avatarColor(member.email);
+  const av   = pickAvatar(member.email);
   return (
     <motion.div
       layout
@@ -184,14 +216,12 @@ function MemberRow({ member, delay }: { member: Member; delay: number }) {
       {/* Left: white pill — avatar + name/email */}
       <div className="bg-white flex items-center justify-center overflow-clip px-[4px] py-[2px] relative rounded-[16px] shrink-0">
         <div className="flex gap-[8px] items-center relative shrink-0">
-          {/* 40px avatar */}
+          {/* Avatar illustration — 40×40 */}
           <div
-            className="relative rounded-full shrink-0 size-[40px] flex items-center justify-center overflow-hidden"
-            style={{ background: bg }}
+            className="relative rounded-full shrink-0 size-[40px] overflow-hidden"
+            style={{ background: av.bg }}
           >
-            <span className="text-[16px] font-semibold text-[#171717] leading-none select-none">
-              {name[0].toUpperCase()}
-            </span>
+            <img alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover" src={av.src} />
           </div>
           {/* Name + email */}
           <div className="flex flex-col items-start justify-center relative shrink-0 whitespace-nowrap">
@@ -227,6 +257,7 @@ interface ChipProps { email: string; onRemove: () => void; }
 
 function EmailChip({ email, onRemove }: ChipProps) {
   const name = displayName(email);
+  const av   = pickAvatar(email);
   return (
     <motion.div
       layout
@@ -239,14 +270,12 @@ function EmailChip({ email, onRemove }: ChipProps) {
     >
       <div aria-hidden="true" className="absolute bg-white inset-0 pointer-events-none rounded-[16px]" />
       <div className="flex gap-[2px] items-center relative shrink-0">
-        {/* Avatar */}
+        {/* Avatar illustration — 16×16 */}
         <div
-          className="relative rounded-full shrink-0 size-[16px] flex items-center justify-center overflow-hidden"
-          style={{ background: avatarColor(email) }}
+          className="relative rounded-full shrink-0 size-[16px] overflow-hidden"
+          style={{ background: av.bg }}
         >
-          <span className="text-[8px] font-semibold text-[#171717] leading-none select-none">
-            {name[0].toUpperCase()}
-          </span>
+          <img alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover" src={av.src} />
         </div>
         {/* Name */}
         <p className="font-normal leading-[18px] relative shrink-0 text-[12px] text-[#171717] whitespace-nowrap">
