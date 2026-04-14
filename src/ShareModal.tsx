@@ -27,6 +27,7 @@
  * ──────────────────────────────────────────────────────────────────────────── */
 
 import { useEffect, useRef, useState } from "react";
+import { useMotionValue, animate as fmAnimate } from "framer-motion";
 import type React from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -39,7 +40,8 @@ import IMG_GLOBE_SUBTRACT from "./assets/globe-subtract.svg";
 import IMG_CLOSE          from "./assets/close.svg";
 import IMG_ARROW_DOWN     from "./assets/arrow-down.svg";
 import IMG_CHIP_CLOSE     from "./assets/chip-close.svg";
-import IMG_CHECK          from "./assets/check.svg";
+import IMG_CHECK               from "./assets/check.svg";
+import IMG_MINGCUTE_CLOSE      from "./assets/mingcute-close-fill.svg";
 export { IMG_GLOBE_KEYLINES, IMG_GLOBE_SUBTRACT }; // suppress unused-export lint
 
 // ─── Avatar illustrations (node 202418-305811) ───────────────────────────────
@@ -196,6 +198,15 @@ const SHADOW = {
 const CHIP_SPRING   = { type: "spring" as const, visualDuration: 0.2, bounce: 0.3 };
 const MEMBER_SPRING = { type: "spring" as const, visualDuration: 0.28, bounce: 0.18 };
 
+// ─── SWIPE-TO-DELETE ──────────────────────────────────────────────────────────
+/* STORYBOARD:
+ *   drag left  past  -28px → snap open  to -56px (delete button fully revealed)
+ *   drag right past -28px  → snap close to   0px
+ *   click ×                → member exits left with fade
+ */
+const SWIPE_DELETE_WIDTH = 56;
+const SWIPE_SNAP = { type: "spring" as const, stiffness: 500, damping: 38 };
+
 function displayName(email: string) {
   return email.includes("@") ? email.split("@")[0] : email;
 }
@@ -301,44 +312,97 @@ function PermissionDropdown({ value, onChange }: { value: Permission; onChange: 
 // ─── MEMBER ROW (appears in "Members with access" after invite) ───────────────
 interface Member { email: string; permission: Permission; }
 
-function MemberRow({ member, delay, onPermissionChange }: { member: Member; delay: number; onPermissionChange: (v: Permission) => void }) {
+function MemberRow({
+  member,
+  delay,
+  onPermissionChange,
+  onDelete,
+}: {
+  member: Member;
+  delay: number;
+  onPermissionChange: (v: Permission) => void;
+  onDelete: () => void;
+}) {
   const name = displayName(member.email);
   const av   = pickAvatar(member.email);
+  const x    = useMotionValue(0);
+
+  function handleDragEnd() {
+    // Snap open if dragged past half-width, else snap shut
+    if (x.get() < -(SWIPE_DELETE_WIDTH / 2)) {
+      fmAnimate(x, -SWIPE_DELETE_WIDTH, SWIPE_SNAP);
+    } else {
+      fmAnimate(x, 0, SWIPE_SNAP);
+    }
+  }
+
   return (
+    // Outer: layout + enter/exit — clips the delete button that lives behind the row
     <motion.div
       layout
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -6, transition: { duration: 0.12, ease: "easeIn" as const } }}
       transition={{ ...MEMBER_SPRING, delay }}
-      className="flex items-center justify-between w-full"
+      className="relative w-full overflow-hidden rounded-[10px]"
     >
-      {/* Left: white pill — avatar + name/email */}
-      <div className="bg-white flex items-center justify-center overflow-clip px-[4px] py-[2px] relative rounded-[16px] shrink-0">
-        <div className="flex gap-[8px] items-center relative shrink-0">
-          {/* Avatar illustration — 40×40 */}
-          <div
-            className="relative rounded-full shrink-0 size-[40px] overflow-hidden"
-            style={{ background: av.bg }}
-          >
-            <img alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover" src={av.src} />
-          </div>
-          {/* Name + email */}
-          <div className="flex flex-col items-start justify-center relative shrink-0 whitespace-nowrap">
-            <p
-              className="font-medium leading-[20px] text-[13px] text-[#171717] not-italic"
-              style={{ letterSpacing: "-0.006em", fontFeatureSettings: "'calt' 0, 'liga' 0" }}
+      {/* Delete button — sits behind the row, revealed on swipe-left */}
+      <div
+        className="absolute inset-y-0 right-0 flex items-center justify-center"
+        style={{ width: SWIPE_DELETE_WIDTH }}
+      >
+        <button
+          onClick={onDelete}
+          className="flex items-center justify-center w-full h-full cursor-pointer focus-visible:outline-none rounded-r-[10px]"
+          style={{ background: "#f97316" }}
+          aria-label={`Remove ${member.email}`}
+        >
+          <img
+            src={IMG_MINGCUTE_CLOSE}
+            alt=""
+            aria-hidden="true"
+            className="size-[18px] pointer-events-none"
+          />
+        </button>
+      </div>
+
+      {/* Draggable row — slides left to reveal delete button */}
+      <motion.div
+        style={{ x }}
+        drag="x"
+        dragConstraints={{ left: -SWIPE_DELETE_WIDTH, right: 0 }}
+        dragElastic={0.06}
+        dragMomentum={false}
+        onDragEnd={handleDragEnd}
+        className="flex items-center justify-between w-full bg-white relative"
+      >
+        {/* Left: white pill — avatar + name/email */}
+        <div className="bg-white flex items-center justify-center overflow-clip px-[4px] py-[2px] relative rounded-[16px] shrink-0">
+          <div className="flex gap-[8px] items-center relative shrink-0">
+            {/* Avatar illustration — 40×40 */}
+            <div
+              className="relative rounded-full shrink-0 size-[40px] overflow-hidden"
+              style={{ background: av.bg }}
             >
-              {name}
-            </p>
-            <p className="font-normal leading-[18px] text-[12px] text-[#5c5c5c]">
-              {member.email.includes("@") ? member.email : `${member.email}@email.com`}
-            </p>
+              <img alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover" src={av.src} />
+            </div>
+            {/* Name + email */}
+            <div className="flex flex-col items-start justify-center relative shrink-0 whitespace-nowrap">
+              <p
+                className="font-medium leading-[20px] text-[13px] text-[#171717] not-italic"
+                style={{ letterSpacing: "-0.006em", fontFeatureSettings: "'calt' 0, 'liga' 0" }}
+              >
+                {name}
+              </p>
+              <p className="font-normal leading-[18px] text-[12px] text-[#5c5c5c]">
+                {member.email.includes("@") ? member.email : `${member.email}@email.com`}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-      {/* Right: permission dropdown */}
-      <PermissionDropdown value={member.permission} onChange={onPermissionChange} />
+        {/* Right: permission dropdown */}
+        <PermissionDropdown value={member.permission} onChange={onPermissionChange} />
+      </motion.div>
     </motion.div>
   );
 }
@@ -761,6 +825,9 @@ export function ShareModal({ onClose }: ShareModalProps) {
                           setMembers((prev) =>
                             prev.map((x) => x.email === m.email ? { ...x, permission: v } : x)
                           )
+                        }
+                        onDelete={() =>
+                          setMembers((prev) => prev.filter((x) => x.email !== m.email))
                         }
                       />
                     ))}
